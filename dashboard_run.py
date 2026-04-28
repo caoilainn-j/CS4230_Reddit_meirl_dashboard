@@ -5,6 +5,7 @@ import pandas as pd
 import networkx as nx
 import plotly.express as px
 import plotly.graph_objects as go
+import matplotlib.pyplot as plt
 
 st.set_page_config(
     page_title="Trend of Comment Behavior of Subreddit r/meirl",
@@ -90,10 +91,8 @@ def load_data():
     # combine all sampled bins
     sp_dict = pd.concat(sp_dicts)
 
-
     # shuffle to see variation in number of comments in output
     sp_dict = sp_dict.sample(frac=1, random_state=42).reset_index(drop=True)
-
 
     # separate the comments that apply to these posts to use for analysis
     # sampled post id
@@ -131,9 +130,53 @@ def load_data():
     # copy into new comments dataframe for analysis
     sampled_comments_clean = sampled_comments[comment_columns].copy()
     
-    return sampled_posts_clean, sampled_comments_clean, distribution
+    return sampled_posts_clean, sampled_comments_clean, distribution, sp_dict
 
-    
+@st.cache_data
+def prepare_graph_data():
+    sampled_posts_clean, sampled_comments_clean, distribution, sp_dict = load_data()
+
+    network1 = nx.Graph()
+
+    # add post nodes
+    for _, row in sampled_posts_clean.iterrows():
+        network1.add_node(
+            row["id"],
+            type="post",
+            created_utc=row["created_utc"],
+            permalink=row["permalink"],
+            score=row["score"]
+        )
+
+    valid_post_ids = set(sampled_posts_clean["id"])
+
+    # add comment nodes and connect to posts
+    for _, row in sampled_comments_clean.iterrows():
+        comment_id = row["id"]
+        post_id = row["post_id"]
+        sentiment = row["sentiment"]
+
+        if post_id in valid_post_ids:
+            if sentiment > 0.2:
+                color = "green"
+            elif sentiment < -0.2:
+                color = "red"
+            else:
+                color = "blue"
+
+            network1.add_node(
+                comment_id,
+                type="comment",
+                created_utc=row["created_utc"],
+                permalink=row["permalink"],
+                body=row["body"],
+                sentiment=sentiment,
+                post_id=post_id,
+                color=color
+            )
+            network1.add_edge(post_id, comment_id)
+
+    return sampled_posts_clean, sampled_comments_clean, distribution, sp_dict, network1   
 
 st.title("Trend of Comment Behavior of Subreddit r/meirl")
 st.write(
@@ -172,7 +215,7 @@ with tab1:
     post's comment section overall tone is and how it can impact what kinds of comments occur over time.          
     """)
     # load in data here
-    post_nodes, comment_nodes, dist = load_data()
+    post_nodes, comment_nodes, dist, sp_dict = load_data()
     
     st.markdown("""
     ## Research Questions
@@ -263,8 +306,102 @@ with tab1:
 
 # page 2
 with tab2:
-    st.header("Graph Structure, Degree Distribution Here")
+    st.header("Graph Structure & Degree Distribution")
 
+    sampled_posts_clean, sampled_comments_clean, distribution, sp_dict, network1 = prepare_graph_data()
+
+    st.markdown("""
+    This tab shows two network-related views:
+
+    - a bipartite subgraph
+    - a degree distribution graph
+    """)
+
+    num_posts_to_show = st.slider(
+        "Number of post nodes to show in the bipartite subgraph",
+        min_value=1,
+        max_value=min(25, len(sampled_posts_clean)),
+        value=5
+    )
+
+    st.subheader("Bipartite Subgraph: Posts and Comments")
+
+    # choose some post nodes
+    post_nodes_subset = [
+        n for n, d in network1.nodes(data=True) if d["type"] == "post"
+    ][:num_posts_to_show]
+
+    # collect selected posts and their connected comments
+    nodes_to_draw = set(post_nodes_subset)
+    for p in post_nodes_subset:
+        nodes_to_draw.update(network1.neighbors(p))
+
+    # create subgraph
+    small_graph = network1.subgraph(nodes_to_draw)
+
+    # separate node sets
+    post_nodes_small = [n for n, d in small_graph.nodes(data=True) if d["type"] == "post"]
+    comment_nodes_small = [n for n, d in small_graph.nodes(data=True) if d["type"] == "comment"]
+
+    # bipartite layout
+    bipartite_pos = nx.bipartite_layout(small_graph, post_nodes_small)
+
+    # colors and sizes
+    node_colors = []
+    node_sizes = []
+
+    for n in small_graph.nodes():
+        if small_graph.nodes[n]["type"] == "post":
+            node_colors.append("black")
+            node_sizes.append(250)
+        else:
+            node_colors.append(small_graph.nodes[n].get("color", "blue"))
+            node_sizes.append(80)
+
+    fig1, ax1 = plt.subplots(figsize=(12, 8))
+    nx.draw(
+        small_graph,
+        bipartite_pos,
+        node_color=node_colors,
+        node_size=node_sizes,
+        with_labels=False,
+        ax=ax1
+    )
+    ax1.set_title("Bipartite Subgraph: Posts and Comments")
+
+    st.pyplot(fig1)
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Total Nodes", small_graph.number_of_nodes())
+    c2.metric("Subgraph Edges", small_graph.number_of_edges())
+    c3.metric("Post Nodes", len(post_nodes_small))
+    c4.metric("Comment Nodes", len(comment_nodes_small))
+
+    st.markdown("""
+    Black nodes represent posts. Colored nodes represent comments attached to one post.
+    Comment color reflects sentiment grouping:
+    - green = more positive
+    - red = more negative
+    - blue = more neutral
+    """)
+
+    st.subheader("Degree Distribution of Post Nodes")
+
+    degrees = sp_dict["num_comments"]
+    max_degree = int(degrees.max())
+    bins = range(0, max_degree + 10, 10)
+
+    fig2, ax2 = plt.subplots(figsize=(8, 6))
+    ax2.hist(degrees, bins=bins)
+    ax2.set_xlabel("Number of Comments")
+    ax2.set_ylabel("Number of Posts")
+    ax2.set_title("Degree Distribution of Post Nodes")
+
+    st.pyplot(fig2)
+
+    st.markdown("""
+    Degree distribution explanation
+    """)
 # page 3
 with tab3:
     st.header("Sentiment Here")
