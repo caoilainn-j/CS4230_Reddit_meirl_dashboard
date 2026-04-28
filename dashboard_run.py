@@ -14,7 +14,7 @@ st.set_page_config(
 @st.cache_data
 
 def load_data():
-    # read in initial dataset (very large, cannot push files directly to GitHub so have to unzip before using and zip before pushing)
+    # read in initial dataset (very large, cannot push files directly to GitHub so have to insert/remove before using/pushing respectively)
     posts = pd.read_csv("meirl_datasets/the-reddit-irl-dataset-posts.csv")
     comments = pd.read_csv("meirl_datasets/the-reddit-irl-dataset-comments.csv")
 
