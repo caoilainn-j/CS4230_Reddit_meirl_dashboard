@@ -1,1 +1,5 @@
-to make sure folder doesn't disappear
+to make sure folder doesn't disappear!
+
+Please place 'the-reddit-irl-dataset-comments.csv' and 'the-reddit-irl-dataset-posts.csv'
+    in the same folder as this text file, so the path in dashboard_run.py can correctly find
+    where to read in the datasets to display dashboard results!
