@@ -402,9 +402,156 @@ with tab2:
     st.markdown("""
     Degree distribution explanation
     """)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # page 3
 with tab3:
-    st.header("Sentiment Here")
+    st.header("Sentiment Over Time")
+
+    #get data from above
+    posts, comments, _, sp_dict = load_data()
+    #convert the utc into readable timestamps
+    comments["created_dt"] = pd.to_datetime(comments["created_utc"], unit="s")
+
+    #sort comments with the posts they belong to, and calculate the sentiment of the post by adding 
+    # the comment sentiments and merge with the existing number of comments attribute 
+    post_summary = comments.groupby("post_id")["sentiment"].sum().reset_index()
+    post_summary = post_summary.merge(sp_dict[["post_id", "num_comments"]], on="post_id")
+
+    #sort to find the posts with the most comments  
+    top_posts = post_summary.sort_values("num_comments", ascending=False).head(20)
+    #TEXT
+    st.markdown("""
+    ### Network Graph
+
+    Select a post from the dropdown menu to study. The posts are arranged based on the 
+    number of comments they have, with the top being the post with the most comments. 
+    Slide to change the munber of comments shown in the plots. 
+
+    The color of the nodes signifies the sentiment score of the nodes as defined in the dataset, 
+    with blue being neutral, green being positive, and red being negative.
+    Notice how the sentiment of the middle(post) node changes as number of the comments increase.
+    """)
+
+
+
+    #user can select which post to view from a dropdown menu, sorted in decreasing order of the number of comments 
+    selected_post = st.selectbox("Post", top_posts["post_id"])
+
+    #for the selected post, extract it's comments and sort by the timestamp 
+    post_comments = comments[comments["post_id"] == selected_post].sort_values("created_dt").reset_index(drop=True)
+
+    if len(post_comments) == 0:
+        st.warning("No comments")
+    else:
+        #set the maximum comment to be chosen to either the maximum number
+        # comments or 800 if it's more than that to keep it visible 
+        max_n = min(800, len(post_comments))
+
+        #user can pick how many comments to show in plot using slider min 1, default 5
+        step = st.slider("Comments shown", 1, max_n, 20)
+
+        #takes the N amount of comments from the sorted dataframe
+        current = post_comments.iloc[:step] 
+
+        #take the sentiment of the comments and add to find the curr post sentiment 
+        sentiment = current["sentiment"].sum() 
+
+
+
+        
+        #graph
+        G = nx.Graph()
+        G.add_node(selected_post)
+
+        #color coding node based on sentiment score 
+        for _, r in current.iterrows():
+            color = "green" if r["sentiment"] > 0 else "red" if r["sentiment"] < 0 else "blue"
+            G.add_node(r["id"], color=color)
+            G.add_edge(selected_post, r["id"])
+
+        pos = nx.spring_layout(G, seed=42)
+
+        edge_x, edge_y = [], []
+        for e in G.edges():
+            x0, y0 = pos[e[0]]
+            x1, y1 = pos[e[1]]
+            edge_x += [x0, x1, None]
+            edge_y += [y0, y1, None]
+
+        node_x, node_y, node_c = [], [], []
+        for n in G.nodes():
+            x, y = pos[n]
+            node_x.append(x)
+            node_y.append(y)
+            if n == selected_post: # color coding of the post node
+                node_c.append("green" if sentiment > 0 else "red" if sentiment < 0 else "blue")
+            else:
+                node_c.append(G.nodes[n].get("color", "blue"))
+
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=edge_x, y=edge_y, mode="lines", line=dict(color="gray"), showlegend=False))
+        fig.add_trace(go.Scatter(x=node_x, y=node_y, mode="markers",
+                                 marker=dict(size=12, color=node_c),
+                                 showlegend=False))
+
+        fig.update_layout(height=400, margin=dict(l=10, r=10, t=30, b=10),
+                          xaxis=dict(visible=False), yaxis=dict(visible=False))
+
+        st.plotly_chart(fig, use_container_width=True)
+
+
+
+
+        st.markdown("""
+        ### Line Chart
+
+        This chart shows how the overall post sentiment changes over the number of comments.
+        The comments are picked based on their timestamps, with the first comments shown 
+        being the ones that are commented before the rest.   
+        """)
+
+
+        # plot
+        df = current.copy()
+        df["n"] = range(1, len(df) + 1)
+        df["cum_sent"] = df["sentiment"].cumsum()
+
+        fig2 = go.Figure()
+        fig2.add_trace(go.Scatter(
+            x=df["n"],
+            y=df["cum_sent"],
+            mode="lines",
+            name="Post sentiment"
+        ))
+
+        fig2.update_layout(
+            height=400,
+            xaxis=dict(title="Number of comments"),
+            yaxis=dict(title="Overall post sentiment"),
+            title="Post Sentiment Over Number of Comments"
+        )
+
+        st.plotly_chart(fig2, use_container_width=True)
+
+
+
 
 # page 4
 with tab4:
