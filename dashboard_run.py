@@ -400,7 +400,8 @@ with tab2:
     st.pyplot(fig2)
 
     st.markdown("""
-    Degree distribution explanation
+    This graph above shows the degree distribution of the post nodes, which is equivalent to the distribution of the number of comments per post.
+    We can see that most posts have a small number of comments, while a few posts have a large number of comments, which is consistent with the comment distribution we saw in the first tab.
     """)
 
 
