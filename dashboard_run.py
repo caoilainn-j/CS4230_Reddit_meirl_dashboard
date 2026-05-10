@@ -216,6 +216,7 @@ with tab1:
     """)
     # load in data here
     post_nodes, comment_nodes, dist, sp_dict = load_data()
+    average_comments_per_post = sp_dict['num_comments'].mean()
     
     st.markdown("""
     ## Research Questions
@@ -228,9 +229,10 @@ with tab1:
     st.markdown("""
     ## Dataset Details
     """)
-    c1, c2 = st.columns(2)
+    c1, c2, c3 = st.columns(3)
     c1.metric("Post Nodes", len(post_nodes))
     c2.metric("Comment Nodes", len(comment_nodes))
+    c3.metric("Average No. of Comments Per Post", round(average_comments_per_post, 3))
     st.markdown("""
     ### Comment Distribution Among Posts
     The comment distribution shows the proportion of posts (shown on the left have side) that have
@@ -253,7 +255,7 @@ with tab1:
     st.markdown("""
     ### Post Nodes
     The post nodes in our network are representative of the posts found in the r/meirl and r/me_irl
-    subreddits. While cut down after cleaning, we have just under 10,000 posts thta all have comments attached to them, as
+    subreddits. While cut down after cleaning, we have just under 10,000 posts that all have comments attached to them, as
     posts that have no comments within this dataset are not very useful to the questions we are trying to answer.
                 
     Each post node has four attributes of interest:
@@ -304,7 +306,10 @@ with tab1:
         use_container_width=True
         )
 
-# page 2
+    
+
+
+# page 2 - Graph Structure
 with tab2:
     st.header("Graph Structure & Degree Distribution")
 
@@ -325,6 +330,13 @@ with tab2:
     )
 
     st.subheader("Bipartite Subgraph: Posts and Comments")
+    st.markdown("""
+    Black nodes represent posts. Colored nodes represent comments attached to one post.
+    Comment color reflects sentiment grouping:
+    - green = more positive
+    - red = more negative
+    - blue = more neutral
+    """)
 
     # choose some post nodes
     post_nodes_subset = [
@@ -377,51 +389,30 @@ with tab2:
     c3.metric("Post Nodes", len(post_nodes_small))
     c4.metric("Comment Nodes", len(comment_nodes_small))
 
-    st.markdown("""
-    Black nodes represent posts. Colored nodes represent comments attached to one post.
-    Comment color reflects sentiment grouping:
-    - green = more positive
-    - red = more negative
-    - blue = more neutral
-    """)
-
     st.subheader("Degree Distribution of Post Nodes")
 
     degrees = sp_dict["num_comments"]
     max_degree = int(degrees.max())
     bins = range(0, max_degree + 10, 10)
 
-    fig2, ax2 = plt.subplots(figsize=(8, 6))
+    fig2, ax2 = plt.subplots(figsize=(6, 4))
     ax2.hist(degrees, bins=bins)
     ax2.set_xlabel("Number of Comments")
     ax2.set_ylabel("Number of Posts")
     ax2.set_title("Degree Distribution of Post Nodes")
 
-    st.pyplot(fig2)
+    st.pyplot(fig2, use_container_width=True)
 
     st.markdown("""
     This graph above shows the degree distribution of the post nodes, which is equivalent to the distribution of the number of comments per post.
-    We can see that most posts have a small number of comments, while a few posts have a large number of comments, which is consistent with the comment distribution we saw in the first tab.
+    We can see that most posts have a small number of comments, while a few posts have a large number of comments, which is consistent with the comment distribution we saw in the
+     first tab. This is also indicative of the standard power law distrbution that is commonly seen in real-world networks, with 
+    a heavy side on the left tailing off to the right ("rich get richer," small amounts of the posts contain most
+    of the comments in the network.)
     """)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# page 3
+# page 3 - Sentiment Over Time
 with tab3:
     st.header("Sentiment Over Time")
 
@@ -450,8 +441,6 @@ with tab3:
     Notice how the sentiment of the middle(post) node changes as number of the comments increase.
     """)
 
-
-
     #user can select which post to view from a dropdown menu, sorted in decreasing order of the number of comments 
     selected_post = st.selectbox("Post", top_posts["post_id"])
 
@@ -474,9 +463,6 @@ with tab3:
         #take the sentiment of the comments and add to find the curr post sentiment 
         sentiment = current["sentiment"].sum() 
 
-
-
-        
         #graph
         G = nx.Graph()
         G.add_node(selected_post)
@@ -517,9 +503,6 @@ with tab3:
 
         st.plotly_chart(fig, use_container_width=True)
 
-
-
-
         st.markdown("""
         ### Line Chart
 
@@ -553,7 +536,238 @@ with tab3:
 
 
 
-
-# page 4
+# page 4 - Conclusion
 with tab4:
-    st.header("Conclusion Here")
+    st.header("Conclusions")
+
+    # Research Question 1
+    st.markdown("""
+        ### Comment Sentiment Variance
+        """)
+    
+    post_std = []
+    post_avg_sentiments = []
+
+    for post_id in sampled_posts_clean['id']:
+        post_comments = sampled_comments_clean[sampled_comments_clean['post_id'] == post_id]
+
+        if len(post_comments) < 2:
+            # Need at least 2 comments for standard deviation, but can calculate average sentiment
+            if len(post_comments) == 1:
+                post_avg_sentiments.append(post_comments['sentiment'].iloc[0])
+            continue
+
+        standard_dev = post_comments['sentiment'].std()
+        post_std.append(standard_dev)
+
+        # Calculate average sentiment for comments in the current post
+        avg_post_sentiment = post_comments['sentiment'].mean()
+        post_avg_sentiments.append(avg_post_sentiment)
+
+    # average standard deviation across posts
+    avg_std = sum(post_std) / len(post_std)
+
+    # average sentiment score across all posts
+    if post_avg_sentiments:
+        overall_avg_sentiment = sum(post_avg_sentiments) / len(post_avg_sentiments)
+    else:
+        overall_avg_sentiment = 0.0 # Handle case where no posts have comments
+
+
+    d1, d2 = st.columns(2)
+    d1.metric("Average Comment Sentiment Per Post", round(overall_avg_sentiment, 5))
+    d2.metric("Average Sentiment Standard Deviation Per Post", round(avg_std, 5))
+    
+    st.markdown("""
+        For our first research question, we unfortunately cannot draw any conclusions regarding if
+        comments within a post's comment section tend to share the same sentiment. Because the average 
+        sentiment per post is 0.15, meaning most comments trend slightly postive, and the
+        average standard deviation is almost double that, it implies that most of the comment's sentiments
+        per post are very spread out from the average sentiment. Therefore, we cannot conclude that there is a 
+        distinctive pattern to demostrate that all comments on a post tend to be around the same sentiment.
+        """)
+    
+    # Research Question 2
+    st.markdown("""
+        ### Sentiment Over Time - Trends
+        
+        For our second research question, we can make some more interesting conclusions
+        about the sentiment over a post's comment section lifespan. By looking at the five top-commented
+        positive sentiment posts and the five top-commented negative sentiment posts, we can see how the 
+        sentiment of the comments starts out and how it ends. Overall, we see:
+            
+        * 3 out of 5 postive sentiment posts start with mostly negative comments
+        * 1 out of 5 positive sentiment posts start with mostly positive comments
+        * 1 out of 5 positive sentiment posts start with neutral comments
+        * 5 out of 5 negative sentiment posts start with negative comments
+                
+        While it is a small portion, seeing that the top posts for both positive and negative
+        sentiment comment sections start off with mostly negative comments is an interesting trend,
+        but makes it diffcult to conclude anythong for positive sentiment posts. However, since all
+        the top negative comment section posts started negative and remained negative, this means that
+        there could be interest in researching if early negative behvaior in comment sections
+        sets the tone for how the comment section "ends."
+        """)
+    
+    # Comment Growth Over Time with Sentiment Changing Line Color
+
+    post_sentiment_summary = sampled_comments_clean.groupby('post_id')['sentiment'].sum().reset_index()
+    post_sentiment_summary.columns = ['post_id', 'total_sentiment']
+
+    # merge with number of comments from sp_dict
+    post_sentiment_summary = post_sentiment_summary.merge(
+        sp_dict[['post_id', 'num_comments']],
+        on='post_id',
+        how='left'
+    )
+    
+    top_positive_posts = post_sentiment_summary[post_sentiment_summary['total_sentiment'] > 0] \
+        .sort_values('num_comments', ascending=False) \
+        .head(5)
+
+    #high-comment negative posts
+    top_negative_posts = post_sentiment_summary[post_sentiment_summary['total_sentiment'] < 0] \
+        .sort_values('num_comments', ascending=False) \
+        .head(5)
+
+
+    comparison_post_ids = top_positive_posts['post_id'].tolist() + top_negative_posts['post_id'].tolist()
+    print(comparison_post_ids)
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # Plot number of comments over time for several posts
+    for post_id in comparison_post_ids:
+        post_comments = sampled_comments_clean[
+            sampled_comments_clean["post_id"] == post_id
+        ].copy()
+
+        post_comments = post_comments.sort_values("created_utc")
+
+        post_comments["comment_number"] = range(1, len(post_comments) + 1)
+        post_comments["cumulative_sentiment"] = post_comments["sentiment"].cumsum()
+
+        x = post_comments["created_utc"].tolist()
+        y = post_comments["comment_number"].tolist()
+        s = post_comments["cumulative_sentiment"].tolist()
+
+        for i in range(len(x) - 1):
+            if s[i] > 0:
+                segment_color = "green"
+            elif s[i] < 0:
+                segment_color = "red"
+            else:
+                segment_color = "blue"
+
+            ax.plot(
+                [x[i], x[i + 1]],
+                [y[i], y[i + 1]],
+                color=segment_color,
+                linewidth=2,
+                alpha=0.8
+            )
+
+    ax.set_xlabel("Timestamp")
+    ax.set_ylabel("Number of Comments")
+    ax.set_title("Comment Growth Over Time with Sentiment-Based Line Color")
+
+    fig.text(
+        0.5,
+        -0.05,
+        "Line color shows cumulative sentiment at that point: green = positive, red = negative, blue = neutral.",
+        ha="center",
+        fontsize=10
+    )
+
+    plt.tight_layout()
+
+    # Streamlit display
+    st.pyplot(fig)
+
+    # Research Question 3
+    st.markdown("""
+        ### Early Comment Growth vs. Final Popularity
+        
+        For our last research question, we found the number of comments obtained within the 
+        first hour of the post's creation, and plotted it against the total of number of comments
+        that post received overall. Our plan was to see if there was any clear trend, particularly a linear upwards trend,
+        which would imply that posts that started with a lot of comments in the first hour 
+        would continue and end with a large amount of comments.
+                
+        However, this was not the case, as it seemed a majority of posts started with 0-10 comments
+        within the first hour, regardless of the total number of comments it received in the end. And, interestingly
+        enough, the few posts that did start off with a lot of comments actually had less overall
+        comments. Therefore, while we weren't able to conclude any linear pattern, it is interesting to see that
+        early commenting behavior does not have much of an impact for how popular the post becomes later on.
+        """)
+    
+    # scatterplot of Early Growth vs. Final Popularity here
+
+    early_counts = []
+    final_counts = []
+
+    for post_id in sampled_posts_clean['id']:
+        post_comments = sampled_comments_clean[sampled_comments_clean['post_id'] == post_id].copy()
+
+        # skip posts that are too little
+        if len(post_comments) < 5:
+            continue
+
+        post_comments = post_comments.sort_values('created_utc')
+
+        # time since first comment
+        post_comments['time_since_start'] = (
+            post_comments['created_utc'] - post_comments['created_utc'].iloc[0]
+        )
+
+        # count how many comments occur in the first hour
+        early_count = len(post_comments[post_comments['time_since_start'] <= 3600])
+
+        # total comments
+        total_comments = len(post_comments)
+
+        early_counts.append(early_count)
+        final_counts.append(total_comments)
+
+    # graph
+
+    fig, ax = plt.subplots(figsize=(8, 6))  # slightly smaller
+
+    ax.scatter(early_counts, final_counts, alpha=0.5)
+
+    ax.set_xlabel("Number of comments in first hour")
+    ax.set_ylabel("Total number of comments")
+    ax.set_title("Early Growth vs Final Popularity")
+
+    # Add whitespace inside figure
+    plt.subplots_adjust(left=0.4, right=1, top=0.8, bottom=0.2)
+
+    col1, col2, col3 = st.columns([1, 6, 1])  # middle column is wider
+
+    with col2:
+        st.pyplot(fig, use_container_width=True)
+    
+
+    st.header("Limitations")
+    st.markdown("""
+        One of the largest limitations of this dataset is the lack of user IDs; while it was done for
+        anonymity purposes, it is frustrating that it is omitted for this data set since it severly limited
+        a lot of the other social network analyses we wuld be able to look at, such as:
+        
+        * Seeing who the top posters (by users whose posts had lots of comments) are
+        * If users who tend to post comments of a certain sentiment interact with other users who post of the same sentiment
+        * Analyzing time stamps of user's commenting behavior over time over multiple posts
+
+        It also prevented us from performing any centrality measures or community detection, which was disappointing as we 
+        spent a large portion of this course woking with such data.
+
+        Another drawback, which is also an ethical concern, is the bias that is likely present when researchers determined
+        the "sentiment" of a comment. Since humor is subjective, especially on a platform such as Reddit, 
+        what may be seen by average researchers or viewers as negative may just be an attempt at satire or 
+        sarcasm, and neutral comments may be images that aren't properly analyzed for sentimental (positive or negative) 
+        context. While speculations could be made, the researchers gave no clear guidelines they used when determining
+        the sentiment score of a comment (whether it be algorithmic or otherwise), so it must be concldued that some kind
+        of bias must be present. However, this could also be opprtunity for any future research done to highlight more 
+        detailed procedures of comment analysis for sentiment, as well as taking into account user IDs (even if codenames /
+        fake identification are to be used for anonymity purposes.)
+    """)
