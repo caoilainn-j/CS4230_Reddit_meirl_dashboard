@@ -15,3 +15,5 @@ This will then open up the dashbaord that you can use to navigate our research a
 
 #### NOTE
 Because our dataset is so large, it may take quite a bit of time to load up for the first time (as it has to sort through 7 million comments to match it to our proportionally sampled posts,) so we appreciate patience when working with our dashboard.
+
+On average, it takes about 4-5 minutes for all the data to fully load in, and some of the interactive features (like seeing the comments attach over time) may also take a bit of time to adjust. Thank you for the patience!
